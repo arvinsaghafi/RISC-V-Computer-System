@@ -1,0 +1,14 @@
+20070113   // addi x2, x0, 5       (x2 = 5)
+20078193   // addi x3, x0, 12      (x3 = 12)
+002183b3   // add x7, x3, x2       (x7 = 17 = 0x11)
+00719263   // sll x4, x3, x7       (x4 = large number) note: shift amount is x7[4:0]=17
+00219223   // sh x2, 4(x3)         (store halfword)
+0041a083   // lw x1, 4(x3)         (load word)
+00738e63   // beq x7, x7, 28       (branch if equal, jumps ahead)
+00000000   // nop
+00000000   // nop
+00000000   // nop
+00000000   // nop
+00000000   // nop
+00000000   // nop
+00000000   // nop
