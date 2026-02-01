@@ -1,47 +1,84 @@
-# RISC-V-Computer-System
-Implementation of a Single-Cycle, Multi-Cycle, and Pipelined Processor in RISC-V.
+# RISC-V Computer System
+
+![SystemVerilog](https://img.shields.io/badge/Language-SystemVerilog-181717?style=for-the-badge&logo=systemverilog)
+![ISA](https://img.shields.io/badge/ISA-RISC--V_RV32I-blue?style=for-the-badge)
+
+A comprehensive implementation of the RISC-V (RV32I) architecture in SystemVerilog. This project explores the evolution of processor microarchitecture by iterating through three distinct designs: **Single-Cycle**, **Multi-Cycle**, and **Pipelined**. The core is designed to be synthesizable for Intel FPGAs and has been verified using a custom assembly stress-test suite in ModelSim.
 
 ## Contents
 - [Overview](#overview)
-- [Part 1: Single Cycle Core](#part-1-single-cycle-core)
+- [System Specifications](#system-specifications)
+- [Part 1: Single-Cycle Core](#part-1-single-cycle-core)
 - [Part 2: Multi-Cycle Core](#part-2-multi-cycle-core)
-  - [Microarchitecture](#microarchitecture)
-  - [Finite State Machine](#finite-state-machine)
+  - [Microarchitecture & FSM](#microarchitecture--fsm)
   - [Verification & Stress Testing](#verification--stress-testing)
-  - [Key Challenges & Debugging](#key-challenges--debugging)
+  - [Key Challenge: Race Conditions](#key-challenge-race-conditions)
 - [Part 3: Pipelined Core](#part-3-pipelined-core)
+  - [Hazard Handling](#hazard-handling)
+  - [Verification: Hazard Stress Test](#verification-hazard-stress-test)
 - [Usage & Simulation](#usage--simulation)
+- [References](#references)
 
 ## Overview
 
-This project implements a soft-core processor based on the RISC-V Instruction Set Architecture (ISA). The design process is broken down into three iterations to explore the trade-offs between CPI (Cycles Per Instruction), clock frequency, and hardware complexity.
-- ISA: RV32I (Base Integer Instruction Set)
-- HDL: SystemVerilog
-- Simulation Tools: ModelSim / QuestaSim
-- Hardware Target: Intel MAX10 FPGA (Verified via simulation)
+This project implements a soft-core processor based on the RISC-V Instruction Set Architecture (ISA). The design process serves as a study in hardware/software co-design, analyzing the trade-offs between CPI (Cycles Per Instruction), Clock Frequency, and Hardware Area.
+- **Iteration 1 (Single-Cycle)**: Focuses on simplicity and atomic instruction execution.
+- **Iteration 2 (Multi-Cycle)**: Focuses on area efficiency and higher clock speeds by breaking critical paths.
+- **Iteration 3 (Pipelined)**: Focuses on throughput optimization using instruction-level parallelism and hazard mitigation.
+
+| Feature         | Details                                     |
+| :---            | :---                                        |
+| ISA             | RISC-V RV32I (Base Integer Instruction Set) |
+| HDL             | SystemVerilog (IEEE 1800-2017)              |
+| Simulation      | ModelSim / QuestaSim                        |
+| Synthesis       | Intel Quartus Prime Lite                    |
+| Hardware Target | Intel MAX10 FPGA                            |
 
 ## Part 1: Single Cycle Core
 
+The first iteration implements the entire instruction execution in a single clock cycle. While conceptually simple, the clock period is limited by the longest path in the circuit (Load Word instruction).
+
+<p align="center">
+  <img src="Single-Cycle%20CPU/Single_Cycle_CPU_Schematic.svg" alt="Single Cycle Schematic" width="800">
+  <br>
+  <em>Figure 1: Complete Single-Cycle Processor. Adapted from [1].</em>
+</p>
+
+- **CPI:** 1 (Theoretical)
+- **Architecture:** Harward (Separate Instruction and Data Memory).
+- **Limitation:** The clock cycle must be long enough to accommodate the slowest instruction (LW), leading to inefficient timing for faster instructions like ADD.
 
 ## Part 2: Multi-Cycle Core
 
-Status: Verified & Benchmarked
+In the second iteration, the processor was refactored into a Multi-Cycle Microarchitecture. This design breaks instruction execution into multiple shorter clock cycles (ranging from 3 to 5 cycles per instruction).
 
-In the second iteration, the processor was refactored into a Multi-Cycle Microarchitecture. Unlike the single-cycle implementation, this design breaks instruction execution into multiple shorter clock cycles (ranging from 3 to 5 cycles per instruction).
+<p align="center">
+  <img src="Multi-Cycle%20CPU/Multi_Cycle_CPU_Schematic.svg" alt="Multi Cycle Schematic" width="800">
+  <br>
+  <em>Figure 2: Complete Multi-Cycle Processor. Adapted from [1].</em>
+</p>
 
-### Microarchitecture
-The multi-cycle design reuses hardware resources (ALU, Memory) across different clock cycles, significantly reducing the hardware area compared to a single-cycle design.
-- **Unified Memory:** A single memory module is used for both Instructions and Data, arbitrated by the control unit.
-- **Resource Sharing:** The ALU calculates both data results and memory addresses.
-- **State Registers:** Added non-architectural registers (A, B, ALUOut, IR) to hold signals stable between clock cycles.
+### Microarchitecture & FSM
+The multi-cycle design employs a **Unified Memory** architecture (Von Neumann) and reuses the ALU for both arithmetic and address calculations, significantly reducing hardware area.
 
-### Finite State Machine
-The core is driven by a complex FSM in the Control Unit that orchestrates the datapath through the following stages:
-1. **Fetch:** Load instruction from memory to IR; PC = PC + 4.
-2. **Decode:** Read register file; Decode Opcode/Funct fields.
+The control logic is driven by a comprehensive **Finite State Machine (FSM)** that orchestrates the datapath:
+1. **Fetch:** Load instruction from memory to Instruction Register (IR).
+2. **Decode:** Read register file and decode Opcode.
 3. **Execute:** Perform ALU operation or calculate branch target.
 4. **Memory:** Access memory (Load/Store) if required.
 5. **Writeback:** Write result to Register File.
+
+### Key Challenge: Race Conditions
+During the implementation of the Multi-Cycle core, a critical **Write-After-Write (WAW) race condition** was identified. The Processor and Memory modules were attempting to drive/read the shared bus on the same active clock edge.
+- **Symptom:** Metastable values appearing on the Address Bus during Store operations.
+- **Solution:*** The memory write logic was shifted to the **negative clock edge** (`negedge clk`). This ensures that the Address and Data signals from the processor (updated on `posedge`) have fully settled before the memory commits the write.
+```
+// Fix applied to memory module to prevent race conditions
+always_ff @(negedge clk) 
+    if (we) RAM[a[31:2]] <= wd;
+```
+
+
 
 ### Verification & Stress Testing
 To validate the processor, a comprehensive Stress Test Suite was developed in assembly. This program tests Arithmetic, Logic, Control Flow, and Memory operations in a single continuous run.
@@ -92,6 +129,13 @@ always_ff @(negedge clk)
 
 ## Part 3: Pipelined Core
 
+<p align="center">
+  <img src="Pipelined%20CPU/Pipelined_CPU_Schematic.svg" alt="Pipelined Schematic" width="800">
+  <br>
+  <em>Figure 2: Complete Pipelined Processor. Adapted from [1].</em>
+</p>
+
+
 
 
 
@@ -117,3 +161,6 @@ run -all
 
 The transcript should display:
 `The transcript should display: Simulation Succeeded! Value 25 written to address 100.`
+
+## References
+[1] S. L. Harris and D. M. Harris, *Digital Design and Computer Architecture: RISC-V Edition*. Cambridge, MA: Morgan Kaufmann, 2022. 
