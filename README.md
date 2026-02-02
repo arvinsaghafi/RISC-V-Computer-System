@@ -55,10 +55,6 @@ RISC-V-Computer-System/
 │   ├── tb_top.sv             # Top-level verification for Pipelined
 │   ├── imem.txt              # Instruction Memory (Hazard Test Suite)
 │   └── dmem.txt              # Data Memory Initialization
-├── Quartus Project/          # Synthesis Files
-│   ├── top.qpf               # Quartus Project File
-│   ├── top.qsf               # Settings File (Pin assignments)
-│   └── output_files/         # Contains .sof bitstream (optional)
 └── README.md
 ```
 
