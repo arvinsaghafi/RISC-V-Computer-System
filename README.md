@@ -1,8 +1,8 @@
 # RISC-V Computer System
 
 ![SystemVerilog](https://img.shields.io/badge/Language-SystemVerilog-181717?style=for-the-badge&logo=systemverilog)
+![Toolchain](https://img.shields.io/badge/Tools-Quartus%20Prime%20|%20QuestaSim-003366?style=for-the-badge)
 ![ISA](https://img.shields.io/badge/ISA-RISC--V_RV32I-blue?style=for-the-badge)
-![Toolchain](https://img.shields.io/badge/Tools-ModelSim%20|%20Quartus%20Prime-green?style=for-the-badge)
 
 A comprehensive implementation of the RISC-V (RV32I) architecture in SystemVerilog. This project explores the evolution of processor microarchitecture by iterating through three distinct designs: **Single-Cycle**, **Multi-Cycle**, and **Pipelined**. The core is designed to be synthesizable for Intel FPGAs and has been verified using a custom assembly stress-test suite.
 
@@ -10,11 +10,13 @@ A comprehensive implementation of the RISC-V (RV32I) architecture in SystemVeril
 - [Overview](#overview)
 - [Repository Structure](#repository-structure)
 - [Part 1: Single-Cycle Core](#part-1-single-cycle-core)
+  - [Microarchitecture](#microarchitecture-single)
 - [Part 2: Multi-Cycle Core](#part-2-multi-cycle-core)
-  - [Microarchitecture](#microarchitecture--fsm)
+  - [Microarchitecture](#microarchitecture-multi)
   - [Verification: FSM Stress Test](#verification-fsm-stress-test)
   - [Key Challenge: Race Conditions](#key-challenge-race-conditions)
 - [Part 3: Pipelined Core](#part-3-pipelined-core)
+  - [Microarchitecture](#microarchitecture-pipelined)
   - [Hazard Handling](#hazard-handling)
   - [Verification: Hazard Unit Stress Test](#verification-hazard-unit-stress-test)
 - [Usage & Simulation](#usage--simulation)
@@ -41,16 +43,15 @@ To ensure reproducibility, this repository includes source code, Quartus project
 ```
 RISC-V-Computer-System/
 ├── Single-Cycle CPU/         # Iteration 1 Source Code
-│   ├── top.sv                # Top-level design
-|   ├── tb_top.sv             # Top-level verification for Single-Cycle
+│   ├── top.sv                # Top-level design for Single-Cycle
 |   ├── imem.txt              # Instruction Memory
 │   └── dmem.txt              # Data Memory Initialization
 ├── Multi-Cycle CPU/          # Iteration 2 Source Code
-|   ├── top.sv
+|   ├── top.sv                # Top-level design for Multi-Cycle
 │   ├── tb_top.sv             # Top-level verification for Multi-Cycle
 │   └── mem.txt               # Hex machine code for FSM stress test
 ├── Pipelined CPU/            # Iteration 3 Source Code
-|   ├── top.sv
+|   ├── top.sv                # Top-level design for Pipelined
 │   ├── tb_top.sv             # Top-level verification for Pipelined
 │   ├── imem.txt              # Instruction Memory (Hazard Test Suite)
 │   └── dmem.txt              # Data Memory Initialization
@@ -71,9 +72,17 @@ The first iteration implements the entire instruction execution in a single cloc
   <em>Figure 1: Complete Single-Cycle Processor. Adapted from [1].</em>
 </p>
 
+### Microarchitecture <a name="microarchitecture-single"></a>
+
+The single-cycle design utilizes a Harvard Architecture, maintaining separate physical memories for Instructions (`imem`) and Data (`dmem`). This allows the processor to fetch an instruction and access data memory in the same clock cycle without contention.
+
+- **Control Unit:** A dedicated main decoder and ALU decoder generate control signals combinatorially based on the Opcode and Funct3/7 fields.
+- **Memory Mapped I/O:** The top-level module maps specific memory addresses to FPGA peripherals, allowing software to control hardware directly:
+  - `0xFF200000`: LEDR (Red LEDs)
+  - `0xFF200020`: HEX3-HEX0 (7-Segment Displays)
+  - `0xFF200030`: HEX5-HEX4
 - **CPI:** 1 (Theoretical)
-- **Architecture:** Harward (Separate Instruction and Data Memory).
-- **Limitation:** The clock cycle must be long enough to accommodate the slowest instruction (LW), leading to inefficient timing for faster instructions like ADD.
+- **Limitation:** The clock frequency is severely limited by the critical path delay ($T_{clk} \geq T_{fetch} + T_{decode} + T_{execute} + T_{memory} + T_{writeback}$).
 
 ## Part 2: Multi-Cycle Core
 
@@ -85,8 +94,9 @@ In the second iteration, the processor was refactored into a Multi-Cycle Microar
   <em>Figure 2: Complete Multi-Cycle Processor. Adapted from [1].</em>
 </p>
 
-### Microarchitecture & FSM
+### Microarchitecture <a name="microarchitecture-multi"></a>
 The multi-cycle design employs a Unified Memory architecture (Von Neumann) and reuses the ALU for both arithmetic and address calculations, significantly reducing hardware area. The control logic is driven by a comprehensive Finite State Machine (FSM) that orchestrates the datapath:
+
 1. **Fetch:** Load instruction from memory to Instruction Register (IR).
 2. **Decode:** Read register file and decode Opcode.
 3. **Execute:** Perform ALU operation or calculate branch target.
@@ -142,11 +152,22 @@ always_ff @(negedge clk)
 
 ## Part 3: Pipelined Core
 
+The final iteration implements a 5-stage pipeline to maximize throughput by exploiting Instruction Level Parallelism (ILP).
+
 <p align="center">
   <img src="Pipelined%20CPU/Pipelined_CPU_Schematic.svg" alt="Pipelined Schematic" width="800">
   <br>
-  <em>Figure 2: Complete Pipelined Processor. Adapted from [1].</em>
+  <em>Figure 4: Complete Pipelined Processor. Adapted from [1].</em>
 </p>
+
+### Microarchitecture <a name="microarchitecture-pipelined"></a>
+The pipelined core divides the instruction execution into five discrete stages, separated by pipeline registers (IF/ID, ID/EX, EX/MEM, MEM/WB). This allows up to five instructions to be active simultaneously.
+
+1. **Fetch (IF):** Reads instruction from Instruction Memory.
+2. **Decode (ID):** Decodes instruction and reads Register File.
+3. **Execute (EX):** Performs ALU calculations.
+4. **Memory (MEM):** Reads/Writes Data Memory.
+5. **Writeback (WB):** Writes results back to Register File.
 
 ### Hazard Handling
 To maintain data integrity without stalling the pipeline unnecessarily, a dedicated Hazard Unit was implemented:
@@ -186,6 +207,8 @@ addi x8, x0, 3    ; Target.
 
 <img width="2385" height="964" alt="riscvpipelined_testbench_questa_wave" src="https://github.com/user-attachments/assets/a35a4c59-cc74-4a4e-a920-2db35875f5d1" />
 
+*Figure 5: Pipelined simulation waveform captured in QuestaSim, showing the orchestration of pipeline control signals.*
+
 ## Usage & Simulation
 To reproduce the verification results using ModelSim or QuestaSim:
 
@@ -194,28 +217,24 @@ To reproduce the verification results using ModelSim or QuestaSim:
 git clone https://github.com/arvinsaghafi/RISC-V-Computer-System.git
 cd riscv-computer-system
 ```
-**2. Compile the Design:**
+**2. Compile and Run the Multi-Cycle Simulation:**
 ```
 vlib work
-vlog top.sv tb_top.sv
+vlog Multi-Cycle\ CPU/testbench.sv Multi-Cycle\ CPU/top.sv
+vsim -voptargs=+acc work.testbench
+run -all
 ```
-**3. Run the Simulation:**
+
+*Expected Output:* Simulation Succeeded! Value 25 written to address 100.
+
+**3. Compile and Run the Pipelined Simulation:**
 ```
+vlib work
+vlog Pipelined\ CPU/tb_top.sv Pipelined\ CPU/top.sv
 vsim -voptargs=+acc work.tb_top
 run -all
 ```
-**4. Verify Output:**
-
-**Multi-Cycle Processor**
-
-The transcript should display:
-```
-Simulation Succeeded! Value 25 written to address 100.
-```
-
-**Pipelined Processor**
-
-The transcript will print the status of individual hazard checks:
+*Expected Output:*
 ```
 [PASS] Basic ALU:  x3 = 15
 [PASS] Forwarding: x4 = 10
@@ -225,4 +244,12 @@ The transcript will print the status of individual hazard checks:
 ```
 
 ## References
-[1] S. L. Harris and D. M. Harris, *Digital Design and Computer Architecture: RISC-V Edition*. Cambridge, MA: Morgan Kaufmann, 2022. 
+[1] S. L. Harris and D. M. Harris, *Digital Design and Computer Architecture: RISC-V Edition*. Cambridge, MA: Morgan Kaufmann, 2022.
+
+## Contact
+
+If you have any questions regarding the implementation, verification methodology, or synthesis, feel free to reach out to me:
+
+**Arvin Saghafi** <br>
+*Electrical Engineering Student* <br>
+LinkedIn: https://www.linkedin.com/in/arvinsaghafi/
