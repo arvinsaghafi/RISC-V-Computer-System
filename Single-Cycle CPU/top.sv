@@ -298,7 +298,7 @@ module imem(input logic [31:0] a,
     logic [31:0] RAM[63:0];
 
     initial
-      $readmemh("C:/Users/arvin/211/lab11/imem.txt", RAM);
+      $readmemh("imem.txt", RAM); // Change file name or file path as needed.
     assign rd = RAM[a[31:2]]; // word aligned
 endmodule
 
@@ -309,7 +309,7 @@ module dmem(input logic clk, we,
     logic [31:0] RAM[63:0]; // Fixed missing semicolon
 	
   	initial
-      $readmemh("C:/Users/arvin/211/lab11/dmem.txt", RAM);
+      $readmemh("dmem.txt", RAM); // Change file name or file path as needed.
   
     assign rd = RAM[a[31:2]]; // word aligned
 

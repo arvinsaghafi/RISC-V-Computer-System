@@ -408,7 +408,7 @@ module mem(input  logic        clk, we,
     
     // Load your program here
     initial
-        $readmemh("riscvtest.txt", RAM); // Change filename as needed
+        $readmemh("mem.txt", RAM); // Change filename as needed
 
     assign rd = RAM[a[31:2]]; // word aligned read
 
